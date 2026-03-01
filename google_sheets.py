@@ -38,51 +38,64 @@ def get_client():
     return gspread.authorize(creds)
 
 
-def open_spreadsheet(gc):
-    """開啟試算表並回傳 Spreadsheet 物件，若不存在則自動建立並寫入標題列。"""
-    try:
-        sheet = gc.open(SPREADSHEET_NAME)
-    except gspread.exceptions.SpreadsheetNotFound:
-        sheet = gc.create(SPREADSHEET_NAME)
-        print(f"已自動建立試算表: {SPREADSHEET_NAME}")
-
-    # 確保控制表有標題列
-    ws = sheet.get_worksheet(0)
-    first_row = ws.row_values(1)
-    if not first_row:
-        ws.update(range_name=f"A1:{_col_letter(len(CONTROL_HEADERS))}1", values=[CONTROL_HEADERS])
-        ws.update_title("stock-list")
-        print("已自動建立 stock-list 標題列")
-
-    return sheet
-
-
-def get_sync_progress(sheet):
+def open_all_spreadsheets(gc):
     """
-    回傳控制表的同步進度。
+    開啟所有 stock-list 系列試算表（stock-list, stock-list_1, stock-list_2, ...）。
+
+    Returns
+    -------
+    list[Spreadsheet]
+        找到的所有試算表列表。
+    """
+    sheets = []
+
+    # 先開 stock-list
+    try:
+        sheets.append(gc.open(SPREADSHEET_NAME))
+    except gspread.exceptions.SpreadsheetNotFound:
+        return sheets
+
+    # 依序嘗試 stock-list_1, stock-list_2, ...
+    n = 1
+    while True:
+        try:
+            sheets.append(gc.open(f"{SPREADSHEET_NAME}_{n}"))
+            n += 1
+        except gspread.exceptions.SpreadsheetNotFound:
+            break
+
+    return sheets
+
+
+def get_sync_progress(sheets):
+    """
+    掃描所有試算表的控制表，回傳總進度與第一筆未同步股票。
 
     Returns
     -------
     tuple(int, int, tuple | None)
         (synced_count, total_count, unsynced_stock)
-        unsynced_stock — (row_number, stock_code, stock_name) 或 None。
+        unsynced_stock — (sheet, row_number, stock_code, stock_name) 或 None。
     """
-    ws = sheet.get_worksheet(0)
-    rows = ws.get_all_values()
-
-    data_rows = rows[1:]  # 跳過標題列
-    total = len(data_rows)
+    total = 0
     synced = 0
     first_unsynced = None
 
-    for idx, row in enumerate(data_rows, start=2):  # row 2 起算（1-based）
-        is_synced = row[COL_IS_SYNCED - 1].strip().upper()
-        if is_synced == "TRUE":
-            synced += 1
-        elif first_unsynced is None:
-            stock_code = row[COL_STOCK_CODE - 1].strip()
-            stock_name = row[COL_STOCK_NAME - 1].strip()
-            first_unsynced = (idx, stock_code, stock_name)
+    for sheet in sheets:
+        ws = sheet.get_worksheet(0)
+        rows = ws.get_all_values()
+
+        data_rows = rows[1:]
+        total += len(data_rows)
+
+        for idx, row in enumerate(data_rows, start=2):
+            is_synced = row[COL_IS_SYNCED - 1].strip().upper()
+            if is_synced == "TRUE":
+                synced += 1
+            elif first_unsynced is None:
+                stock_code = row[COL_STOCK_CODE - 1].strip()
+                stock_name = row[COL_STOCK_NAME - 1].strip()
+                first_unsynced = (sheet, idx, stock_code, stock_name)
 
     return synced, total, first_unsynced
 
@@ -102,21 +115,19 @@ def update_status(sheet, row, status, is_synced=None, elapsed=None):
             )
 
 
-def write_stock_data(gc, stock_code, headers, rows):
+def write_stock_data(sheet, stock_code, headers, rows):
     """
-    建立（或開啟）以 stock_code 命名的獨立試算表，寫入標題與資料。
+    在 stock-list 試算表中建立（或清除）以 stock_code 命名的分頁，寫入資料。
 
     寫入後驗證列數是否正確，否則拋出例外。
     """
-    # 嘗試開啟既有試算表，否則新建
+    # 嘗試取得既有分頁，否則新建
     try:
-        sp = gc.open(stock_code)
-    except gspread.exceptions.SpreadsheetNotFound:
-        sp = gc.create(stock_code)
-        print(f"  已建立試算表: {stock_code}")
-
-    ws = sp.get_worksheet(0)
-    ws.clear()
+        ws = sheet.worksheet(stock_code)
+        ws.clear()
+    except gspread.exceptions.WorksheetNotFound:
+        ws = sheet.add_worksheet(title=stock_code, rows=len(rows) + 1, cols=len(headers))
+        print(f"  已建立分頁: {stock_code}")
 
     # 確保列數足夠
     total_rows = len(rows) + 1
@@ -131,7 +142,7 @@ def write_stock_data(gc, stock_code, headers, rows):
     actual = ws.row_count
     if actual < total_rows:
         raise RuntimeError(
-            f"寫入驗證失敗：試算表 {stock_code} 預期至少 {total_rows} 列，實際 {actual} 列"
+            f"寫入驗證失敗：分頁 {stock_code} 預期至少 {total_rows} 列，實際 {actual} 列"
         )
 
 

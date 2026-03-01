@@ -7,7 +7,7 @@ import time
 
 from google_sheets import (
     get_client,
-    open_spreadsheet,
+    open_all_spreadsheets,
     get_sync_progress,
     update_status,
     write_stock_data,
@@ -17,16 +17,22 @@ from twse_scraper import scrape_stock, HEADERS
 
 def main():
     gc = get_client()
-    sheet = open_spreadsheet(gc)
+    sheets = open_all_spreadsheets(gc)
 
-    synced, total, unsynced = get_sync_progress(sheet)
+    if not sheets:
+        print("找不到任何 stock-list 試算表。")
+        return
+
+    print(f"找到 {len(sheets)} 個試算表")
+
+    synced, total, unsynced = get_sync_progress(sheets)
     print(f"同步進度: {synced}/{total}")
 
     if unsynced is None:
         print("所有股票皆已同步，無待處理項目。")
         return
 
-    row, stock_code, stock_name = unsynced
+    sheet, row, stock_code, stock_name = unsynced
     label = f"{stock_code} {stock_name}"
 
     # 標記為 syncing
@@ -38,7 +44,7 @@ def main():
         if not rows:
             raise ValueError("未取得任何資料")
 
-        write_stock_data(gc, stock_code, HEADERS, rows)
+        write_stock_data(sheet, stock_code, HEADERS, rows)
         elapsed = time.time() - start
         update_status(sheet, row, status="success", is_synced=True, elapsed=elapsed)
         print(f"{label} — 同步完成，抓取 {fetched_months} 個月，共 {len(rows)} 筆，耗時 {elapsed:.0f} 秒")
