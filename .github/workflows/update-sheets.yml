@@ -1,0 +1,25 @@
+name: Update Google Sheets
+
+on:
+  schedule:
+    # 每 5 分鐘執行
+    - cron: "*/5 * * * *"
+  workflow_dispatch: # 允許手動觸發
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run script
+        env:
+          GOOGLE_SHEETS_SECRET: ${{ secrets.GOOGLE_SHEETS_SECRET }}
+        run: python google_sheets.py
