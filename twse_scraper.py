@@ -119,9 +119,15 @@ def scrape_stock(stock_code):
     return all_rows, fetched_months
 
 
-def scrape_recent(stock_code, months=2):
+def scrape_since(stock_code, since_date):
     """
-    只抓取最近 *months* 個月的資料（用於增量更新）。
+    抓取從 *since_date* 所在月份到本月的資料（用於增量更新）。
+
+    Parameters
+    ----------
+    stock_code : str
+    since_date : date
+        從這個日期的月份開始抓取。
 
     Returns
     -------
@@ -129,13 +135,15 @@ def scrape_recent(stock_code, months=2):
         (rows, fetched_months)
     """
     all_rows = []
+    start_month = since_date.replace(day=1)
     current = date.today().replace(day=1)
     fetched_months = 0
 
-    for i in range(months):
-        if i > 0:
+    # 從 since_date 的月份到本月（舊→新）
+    d = start_month
+    while d <= current:
+        if fetched_months > 0:
             time.sleep(2)
-        d = current - relativedelta(months=i)
         rows, api_ok = _fetch_month(stock_code, d)
         fetched_months += 1
 
@@ -146,6 +154,8 @@ def scrape_recent(stock_code, months=2):
             row = row[:9]
             row[0] = _convert_roc_to_ad(row[0])
             all_rows.append(row)
+
+        d += relativedelta(months=1)
 
     all_rows.sort(key=lambda row: row[0])
     return all_rows, fetched_months

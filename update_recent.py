@@ -1,18 +1,21 @@
 """
-增量更新 — 所有已同步的股票，抓最近 2 個月資料追加。
+增量更新 — 每次處理 1 檔今天尚未更新的股票。
+讀取分頁中最後一筆資料日期，只抓該日期之後的月份，以天為單位去重複追加。
 """
 
 import sys
 import time
+from datetime import datetime
 
 from google_sheets import (
     get_client,
     open_all_spreadsheets,
-    get_all_synced,
+    find_need_update,
+    get_last_date,
     update_status,
     append_stock_data,
 )
-from twse_scraper import scrape_recent
+from twse_scraper import scrape_since
 
 
 def main():
@@ -23,44 +26,44 @@ def main():
         print("找不到任何 stock-list 試算表。")
         return
 
-    stocks = get_all_synced(sheets)
-    if not stocks:
-        print("沒有已同步的股票可更新。")
+    result = find_need_update(sheets)
+    if result is None:
+        print("今天所有股票皆已更新。")
         return
 
-    print(f"共 {len(stocks)} 檔股票需要更新")
+    sheet, row, stock_code, stock_name, last_synced = result
+    label = f"{stock_code} {stock_name}"
 
-    success = 0
-    failed = 0
+    # 從分頁讀取實際最後一筆資料日期
+    last_date_str = get_last_date(sheet, stock_code)
+    if not last_date_str:
+        print(f"{label} — 分頁無資料，請先執行全量同步（main.py）")
+        return
 
-    for sheet, row, stock_code, stock_name in stocks:
-        label = f"{stock_code} {stock_name}"
-        start = time.time()
+    since_date = datetime.strptime(last_date_str, "%Y/%m/%d").date()
+    print(f"增量更新: {label}（資料最後日期: {last_date_str}）")
 
-        try:
-            rows, fetched_months = scrape_recent(stock_code)
-            if not rows:
-                print(f"{label} — 無新資料")
-                continue
+    update_status(sheet, row, status="updating")
+    start = time.time()
 
-            added = append_stock_data(sheet, stock_code, rows)
-            elapsed = time.time() - start
-            update_status(sheet, row, status="success", is_synced=True, elapsed=elapsed)
+    try:
+        rows, fetched_months = scrape_since(stock_code, since_date)
+        if not rows:
+            raise ValueError("未取得任何資料")
 
-            if added > 0:
-                print(f"{label} — 新增 {added} 筆，耗時 {elapsed:.0f} 秒")
-            else:
-                print(f"{label} — 資料已是最新")
-            success += 1
+        added = append_stock_data(sheet, stock_code, rows)
+        elapsed = time.time() - start
+        update_status(sheet, row, status="success", is_synced=True, elapsed=elapsed)
 
-        except Exception as exc:
-            elapsed = time.time() - start
-            print(f"{label} — 更新失敗（耗時 {elapsed:.0f} 秒）: {exc}", file=sys.stderr)
-            update_status(sheet, row, status="failed", elapsed=elapsed)
-            failed += 1
+        if added > 0:
+            print(f"{label} — 更新完成，新增 {added} 筆，耗時 {elapsed:.0f} 秒")
+        else:
+            print(f"{label} — 資料已是最新，耗時 {elapsed:.0f} 秒")
 
-    print(f"\n更新完成: 成功 {success}，失敗 {failed}")
-    if failed > 0:
+    except Exception as exc:
+        elapsed = time.time() - start
+        print(f"{label} — 更新失敗（耗時 {elapsed:.0f} 秒）: {exc}", file=sys.stderr)
+        update_status(sheet, row, status="failed", elapsed=elapsed)
         sys.exit(1)
 
 

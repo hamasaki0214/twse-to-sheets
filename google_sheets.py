@@ -144,16 +144,16 @@ def write_stock_data(sheet, stock_code, headers, rows):
         )
 
 
-def get_all_synced(sheets):
+def find_need_update(sheets):
     """
-    取得所有 is_synced=TRUE 的股票。
+    找出第一筆 is_synced=TRUE 且今天尚未更新的股票。
 
     Returns
     -------
-    list[tuple(sheet, int, str, str)]
-        [(sheet, row, stock_code, stock_name), ...]
+    tuple(sheet, int, str, str, str) | None
+        (sheet, row, stock_code, stock_name, last_synced) 或 None。
     """
-    result = []
+    today_str = datetime.now(TW_TZ).strftime("%Y-%m-%d")
 
     for sheet in sheets:
         ws = sheet.get_worksheet(0)
@@ -161,12 +161,36 @@ def get_all_synced(sheets):
 
         for idx, row in enumerate(rows[1:], start=2):
             is_synced = row[COL_IS_SYNCED - 1].strip().upper()
-            if is_synced == "TRUE":
-                stock_code = row[COL_STOCK_CODE - 1].strip()
-                stock_name = row[COL_STOCK_NAME - 1].strip()
-                result.append((sheet, idx, stock_code, stock_name))
+            if is_synced != "TRUE":
+                continue
+            last_synced = row[COL_LAST_SYNCED - 1].strip()
+            # 今天已更新過就跳過
+            if last_synced.startswith(today_str):
+                continue
+            stock_code = row[COL_STOCK_CODE - 1].strip()
+            stock_name = row[COL_STOCK_NAME - 1].strip()
+            return sheet, idx, stock_code, stock_name, last_synced
 
-    return result
+    return None
+
+
+def get_last_date(sheet, stock_code):
+    """
+    取得股票分頁中最後一筆資料的日期。
+
+    Returns
+    -------
+    str | None
+        最後一筆日期字串（如 '2026/02/28'），無資料則回傳 None。
+    """
+    ws = sheet.worksheet(stock_code)
+    all_values = ws.get_all_values()
+
+    if len(all_values) <= 1:
+        return None
+
+    # 最後一列的第一欄就是日期
+    return all_values[-1][0]
 
 
 def append_stock_data(sheet, stock_code, new_rows):
