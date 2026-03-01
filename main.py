@@ -38,7 +38,7 @@ def main():
         if not rows:
             raise ValueError("未取得任何資料")
 
-        write_stock_data(sheet, stock_code, HEADERS, rows)
+        write_stock_data(gc, stock_code, HEADERS, rows)
         elapsed = time.time() - start
         update_status(sheet, row, status="success", is_synced=True, elapsed=elapsed)
         print(f"{label} — 同步完成，抓取 {fetched_months} 個月，共 {len(rows)} 筆，耗時 {elapsed:.0f} 秒")

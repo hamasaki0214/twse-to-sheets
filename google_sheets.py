@@ -102,26 +102,37 @@ def update_status(sheet, row, status, is_synced=None, elapsed=None):
             )
 
 
-def write_stock_data(sheet, stock_code, headers, rows):
+def write_stock_data(gc, stock_code, headers, rows):
     """
-    建立（或清除）以 stock_code 命名的工作表，寫入標題與資料。
+    建立（或開啟）以 stock_code 命名的獨立試算表，寫入標題與資料。
 
-    使用 batch_update 一次寫入，減少 API 呼叫次數。
+    寫入後驗證列數是否正確，否則拋出例外。
     """
-    # 嘗試取得既有工作表，否則新建
+    # 嘗試開啟既有試算表，否則新建
     try:
-        ws = sheet.worksheet(stock_code)
-        ws.clear()
-    except gspread.exceptions.WorksheetNotFound:
-        ws = sheet.add_worksheet(title=stock_code, rows=len(rows) + 1, cols=len(headers))
+        sp = gc.open(stock_code)
+    except gspread.exceptions.SpreadsheetNotFound:
+        sp = gc.create(stock_code)
+        print(f"  已建立試算表: {stock_code}")
+
+    ws = sp.get_worksheet(0)
+    ws.clear()
 
     # 確保列數足夠
-    if ws.row_count < len(rows) + 1:
-        ws.resize(rows=len(rows) + 1, cols=len(headers))
+    total_rows = len(rows) + 1
+    if ws.row_count < total_rows:
+        ws.resize(rows=total_rows, cols=len(headers))
 
     # 組合標題 + 資料，一次寫入
     all_data = [headers] + rows
-    ws.update(range_name=f"A1:{_col_letter(len(headers))}{len(all_data)}", values=all_data)
+    ws.update(range_name=f"A1:{_col_letter(len(headers))}{total_rows}", values=all_data)
+
+    # 驗證寫入結果
+    actual = ws.row_count
+    if actual < total_rows:
+        raise RuntimeError(
+            f"寫入驗證失敗：試算表 {stock_code} 預期至少 {total_rows} 列，實際 {actual} 列"
+        )
 
 
 def _col_letter(n):
