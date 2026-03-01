@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:docs.gspread.org)",
+      "WebFetch(domain:developers.google.com)"
+    ]
+  }
+}

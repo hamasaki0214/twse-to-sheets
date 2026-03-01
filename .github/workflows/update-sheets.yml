@@ -6,9 +6,14 @@ on:
     - cron: "*/5 * * * *"
   workflow_dispatch: # 允許手動觸發
 
+concurrency:
+  group: twse-sync
+  cancel-in-progress: false
+
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -22,4 +27,4 @@ jobs:
       - name: Run script
         env:
           GOOGLE_SHEETS_SECRET: ${{ secrets.GOOGLE_SHEETS_SECRET }}
-        run: python google_sheets.py
+        run: python main.py
