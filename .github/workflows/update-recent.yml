@@ -1,0 +1,30 @@
+name: Update Recent Data
+
+on:
+  schedule:
+    # 每月 1 號 00:00 UTC（台灣 08:00）執行
+    - cron: "0 0 1 * *"
+  workflow_dispatch: # 允許手動觸發
+
+concurrency:
+  group: twse-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run script
+        env:
+          GOOGLE_SHEETS_SECRET: ${{ secrets.GOOGLE_SHEETS_SECRET }}
+        run: python update_recent.py

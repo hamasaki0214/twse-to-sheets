@@ -117,3 +117,35 @@ def scrape_stock(stock_code):
     all_rows.sort(key=lambda row: row[0])
 
     return all_rows, fetched_months
+
+
+def scrape_recent(stock_code, months=2):
+    """
+    只抓取最近 *months* 個月的資料（用於增量更新）。
+
+    Returns
+    -------
+    tuple(list[list[str]], int)
+        (rows, fetched_months)
+    """
+    all_rows = []
+    current = date.today().replace(day=1)
+    fetched_months = 0
+
+    for i in range(months):
+        if i > 0:
+            time.sleep(2)
+        d = current - relativedelta(months=i)
+        rows, api_ok = _fetch_month(stock_code, d)
+        fetched_months += 1
+
+        if not api_ok:
+            raise ScrapeError(f"API 呼叫失敗：{d.strftime('%Y/%m')}")
+
+        for row in rows:
+            row = row[:9]
+            row[0] = _convert_roc_to_ad(row[0])
+            all_rows.append(row)
+
+    all_rows.sort(key=lambda row: row[0])
+    return all_rows, fetched_months

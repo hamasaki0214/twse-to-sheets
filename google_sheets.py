@@ -144,6 +144,64 @@ def write_stock_data(sheet, stock_code, headers, rows):
         )
 
 
+def get_all_synced(sheets):
+    """
+    取得所有 is_synced=TRUE 的股票。
+
+    Returns
+    -------
+    list[tuple(sheet, int, str, str)]
+        [(sheet, row, stock_code, stock_name), ...]
+    """
+    result = []
+
+    for sheet in sheets:
+        ws = sheet.get_worksheet(0)
+        rows = ws.get_all_values()
+
+        for idx, row in enumerate(rows[1:], start=2):
+            is_synced = row[COL_IS_SYNCED - 1].strip().upper()
+            if is_synced == "TRUE":
+                stock_code = row[COL_STOCK_CODE - 1].strip()
+                stock_name = row[COL_STOCK_NAME - 1].strip()
+                result.append((sheet, idx, stock_code, stock_name))
+
+    return result
+
+
+def append_stock_data(sheet, stock_code, new_rows):
+    """
+    將新資料追加到既有的股票分頁末尾（去除重複日期）。
+    """
+    ws = sheet.worksheet(stock_code)
+    existing = ws.get_all_values()
+
+    # 取得已有的日期集合（跳過標題列）
+    existing_dates = {row[0] for row in existing[1:]}
+
+    # 過濾掉已存在的日期
+    rows_to_add = [row for row in new_rows if row[0] not in existing_dates]
+
+    if not rows_to_add:
+        return 0
+
+    # 追加到末尾
+    start_row = len(existing) + 1
+    end_row = start_row + len(rows_to_add) - 1
+    cols = len(rows_to_add[0])
+
+    # 確保列數足夠
+    if ws.row_count < end_row:
+        ws.resize(rows=end_row, cols=cols)
+
+    ws.update(
+        range_name=f"A{start_row}:{_col_letter(cols)}{end_row}",
+        values=rows_to_add,
+    )
+
+    return len(rows_to_add)
+
+
 def _col_letter(n):
     """將欄位數字轉為字母（1→A, 9→I）。"""
     result = ""
