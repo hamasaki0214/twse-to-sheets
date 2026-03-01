@@ -114,7 +114,7 @@ def scrape_stock(stock_code, years=DEFAULT_YEARS):
                 print(f"  連續 {NO_DATA_STOP} 個月無資料，停止往回抓取（{d}）")
                 break
 
-    # 因為是新→舊抓取，反轉為舊→新
-    all_rows.reverse()
+    # 依日期排序（舊→新），日期格式 YYYY/MM/DD 可直接字串排序
+    all_rows.sort(key=lambda row: row[0])
 
     return all_rows, fetched_months
