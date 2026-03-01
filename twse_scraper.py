@@ -12,7 +12,8 @@ import requests
 from dateutil.relativedelta import relativedelta
 
 BASE_URL = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
-DEFAULT_YEARS = 10
+# TWSE 最早可查詢日期
+EARLIEST_DATE = date(2004, 2, 1)
 # 連續幾個月無資料就停止
 NO_DATA_STOP = 5
 HEADERS = [
@@ -21,13 +22,11 @@ HEADERS = [
 ]
 
 
-def _generate_monthly_dates(years=DEFAULT_YEARS):
-    """產生從本月到 *years* 年前的每月第一天列表（新→舊）。"""
-    end = date.today().replace(day=1)
-    start = end - relativedelta(years=years)
+def _generate_monthly_dates():
+    """產生從本月到 TWSE 最早可查詢日期的每月第一天列表（新→舊）。"""
     dates = []
-    current = end
-    while current >= start:
+    current = date.today().replace(day=1)
+    while current >= EARLIEST_DATE:
         dates.append(current)
         current -= relativedelta(months=1)
     return dates
@@ -72,9 +71,9 @@ class ScrapeError(Exception):
     """API 呼叫失敗時拋出。"""
 
 
-def scrape_stock(stock_code, years=DEFAULT_YEARS):
+def scrape_stock(stock_code):
     """
-    抓取 *stock_code* 過去 *years* 年的日交易資料。
+    抓取 *stock_code* 從本月到 TWSE 最早可查詢日期 (2004/02) 的日交易資料。
 
     從最近月份往回抓：
     - API 無回應 / 錯誤 → 立即拋出 ScrapeError（整個失敗）
@@ -88,7 +87,7 @@ def scrape_stock(stock_code, years=DEFAULT_YEARS):
         rows — 每列 9 欄，依日期由舊到新排序。
         fetched_months — 實際呼叫 API 的月份數。
     """
-    months = _generate_monthly_dates(years)
+    months = _generate_monthly_dates()
     all_rows = []
     consecutive_empty = 0
     fetched_months = 0
