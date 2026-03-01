@@ -2,8 +2,8 @@ name: Update Recent Data
 
 on:
   schedule:
-    # 每分鐘執行
-    - cron: "* * * * *"
+    # 每 5 分鐘執行
+    - cron: "*/5 * * * *"
   workflow_dispatch: # 允許手動觸發
 
 concurrency:
