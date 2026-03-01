@@ -48,21 +48,17 @@ def open_all_spreadsheets(gc):
         找到的所有試算表列表。
     """
     sheets = []
+    names = [SPREADSHEET_NAME] + [f"{SPREADSHEET_NAME}_{n}" for n in range(1, 100)]
+    consecutive_miss = 0
 
-    # 先開 stock-list
-    try:
-        sheets.append(gc.open(SPREADSHEET_NAME))
-    except gspread.exceptions.SpreadsheetNotFound:
-        return sheets
-
-    # 依序嘗試 stock-list_1, stock-list_2, ...
-    n = 1
-    while True:
+    for name in names:
         try:
-            sheets.append(gc.open(f"{SPREADSHEET_NAME}_{n}"))
-            n += 1
+            sheets.append(gc.open(name))
+            consecutive_miss = 0
         except gspread.exceptions.SpreadsheetNotFound:
-            break
+            consecutive_miss += 1
+            if consecutive_miss >= 3:
+                break
 
     return sheets
 
