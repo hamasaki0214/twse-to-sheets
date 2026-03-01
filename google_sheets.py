@@ -23,6 +23,9 @@ COL_STOCK_NAME = 2
 COL_IS_SYNCED = 3
 COL_LAST_SYNCED = 4
 COL_STATUS = 5
+COL_ELAPSED = 6
+
+CONTROL_HEADERS = ["stock_code", "stock_name", "is_synced", "last_synced", "status", "elapsed"]
 
 
 def get_client():
@@ -36,37 +39,60 @@ def get_client():
 
 
 def open_spreadsheet(gc):
-    """開啟試算表並回傳 Spreadsheet 物件。"""
-    return gc.open(SPREADSHEET_NAME)
+    """開啟試算表並回傳 Spreadsheet 物件，若不存在則自動建立並寫入標題列。"""
+    try:
+        sheet = gc.open(SPREADSHEET_NAME)
+    except gspread.exceptions.SpreadsheetNotFound:
+        sheet = gc.create(SPREADSHEET_NAME)
+        print(f"已自動建立試算表: {SPREADSHEET_NAME}")
+
+    # 確保控制表有標題列
+    ws = sheet.get_worksheet(0)
+    first_row = ws.row_values(1)
+    if not first_row:
+        ws.update(range_name=f"A1:{_col_letter(len(CONTROL_HEADERS))}1", values=[CONTROL_HEADERS])
+        ws.update_title("stock-list")
+        print("已自動建立 stock-list 標題列")
+
+    return sheet
 
 
-def find_unsynced_stock(sheet):
+def get_sync_progress(sheet):
     """
-    在控制表 (第 0 頁) 找出第一筆 is_synced=FALSE 的股票。
+    回傳控制表的同步進度。
 
     Returns
     -------
-    tuple(int, str, str) | None
-        (row_number, stock_code, stock_name)；找不到則回傳 None。
+    tuple(int, int, tuple | None)
+        (synced_count, total_count, unsynced_stock)
+        unsynced_stock — (row_number, stock_code, stock_name) 或 None。
     """
     ws = sheet.get_worksheet(0)
     rows = ws.get_all_values()
 
-    # 跳過標題列（第 0 列）
-    for idx, row in enumerate(rows[1:], start=2):  # row 2 起算（1-based）
+    data_rows = rows[1:]  # 跳過標題列
+    total = len(data_rows)
+    synced = 0
+    first_unsynced = None
+
+    for idx, row in enumerate(data_rows, start=2):  # row 2 起算（1-based）
         is_synced = row[COL_IS_SYNCED - 1].strip().upper()
-        if is_synced == "FALSE":
+        if is_synced == "TRUE":
+            synced += 1
+        elif first_unsynced is None:
             stock_code = row[COL_STOCK_CODE - 1].strip()
             stock_name = row[COL_STOCK_NAME - 1].strip()
-            return idx, stock_code, stock_name
+            first_unsynced = (idx, stock_code, stock_name)
 
-    return None
+    return synced, total, first_unsynced
 
 
-def update_status(sheet, row, status, is_synced=None):
-    """更新控制表指定列的 status（及可選的 is_synced、last_synced）。"""
+def update_status(sheet, row, status, is_synced=None, elapsed=None):
+    """更新控制表指定列的 status（及可選的 is_synced、last_synced、elapsed）。"""
     ws = sheet.get_worksheet(0)
     ws.update_cell(row, COL_STATUS, status)
+    if elapsed is not None:
+        ws.update_cell(row, COL_ELAPSED, f"{elapsed:.0f}s")
     if is_synced is not None:
         ws.update_cell(row, COL_IS_SYNCED, str(is_synced).upper())
         if is_synced:
