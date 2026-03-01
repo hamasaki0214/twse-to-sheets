@@ -5,7 +5,9 @@ Google Sheets 讀寫操作 — stock-list 控制表 + 個股資料表。
 import os
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+TW_TZ = timezone(timedelta(hours=8))
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -107,7 +109,7 @@ def update_status(sheet, row, status, is_synced=None, elapsed=None):
         if is_synced:
             ws.update_cell(
                 row, COL_LAST_SYNCED,
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                datetime.now(TW_TZ).strftime("%Y-%m-%d %H:%M:%S"),
             )
 
 
